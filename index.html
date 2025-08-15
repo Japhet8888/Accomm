@@ -36,27 +36,10 @@
     .top-row { display:flex; gap:16px; align-items:center; margin-bottom:12px; }
     @media (max-width:900px) { .top-row { flex-direction: column; } .controls { flex-direction: column; } }
 
-    /* ---------------------------
-       Spacing: Name + Room side-by-side
-       --------------------------- */
-    .form-row {
-      display: flex;
-      gap: 18px;         /* horizontal space between the two fields */
-      margin-top: 6px;
-      align-items: flex-start;
-    }
-    .form-row .field {
-      flex: 1;           /* make both fields equal width */
-      min-width: 0;      /* allow proper shrinking */
-      display: flex;
-      flex-direction: column;
-    }
+    .form-row { display: flex; gap: 18px; margin-top: 6px; align-items: flex-start; }
+    .form-row .field { flex: 1; min-width: 0; display: flex; flex-direction: column; }
     .form-row label { margin-bottom: 6px; font-size: 14px; }
-    @media (max-width: 600px) {
-      .form-row { flex-direction: column; gap: 10px; }
-    }
-
-    /* small utility */
+    @media (max-width: 600px) { .form-row { flex-direction: column; gap: 10px; } }
     .muted { color:#666; font-size:13px; }
   </style>
 </head>
@@ -76,7 +59,6 @@
       </select>
     </div>
 
-    <!-- Name & Room grouped with spacing -->
     <div style="flex:2">
       <div class="form-row">
         <div class="field">
@@ -136,7 +118,6 @@
 
   <hr>
 
-  <!-- Controls for viewing schedule -->
   <div class="controls">
     <select id="viewMachine" onchange="renderBookings()">
       <option>Brothers Washer</option>
@@ -177,10 +158,11 @@
   </dialog>
 
 <script>
-/* ====================
-   SCHEDULES (edit as needed)
-   schedules[machine][weekday] = array of time range strings
-   ==================== */
+/* ------------- IMPORTANT: set this to your Apps Script Web App URL ------------- */
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwQjrfaPQxRVAIJ4e0gFzso86MEsQIzZy1Zu0RFa-WK_SK3At2t3pcnGY2t55SS_EZt8A/exec"; // <- Replace with your deployed Apps Script URL
+/* ----------------------------------------------------------------------------- */
+
+/* SCHEDULES */
 const schedules = {
   "Brothers Washer": {
     "Sunday": ["8:00 AM - 9:00 AM","9:00 AM - 10:00 AM"],
@@ -220,46 +202,31 @@ const schedules = {
   }
 };
 
-/* ====================
-   App state
-   Each booking: { id, machine, name, room, date (YYYY-MM-DD), time (slot string), reference, status }
-   ==================== */
+/* App state */
 let isAdmin = false;
-let bookings = JSON.parse(localStorage.getItem("bookings") || "[]");
+let bookings = []; // <-- will be loaded from Google Sheets
 let tempBooking = {};
 
-/* ====================
-   Helpers
-   ==================== */
+/* Helpers */
 function pad(n){ return n<10?'0'+n:n; }
-
 function weekdayNameFromDate(dateStr) {
-  // dateStr must be YYYY-MM-DD or parseable
   const d = new Date(dateStr + 'T00:00:00');
   return ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][d.getDay()];
 }
 function convertStartTo24(timeSlotStart) {
-  // timeSlotStart like "8:30 AM"
   const parts = timeSlotStart.trim().split(" ");
   if (parts.length < 2) return null;
   const [time, ampm] = parts;
-  let [h,m] = time.split(":");
-  h = parseInt(h,10);
-  m = parseInt(m||0,10);
+  let [h,m] = time.split(":"); h = parseInt(h,10); m = parseInt(m||0,10);
   if (ampm.toUpperCase() === "PM" && h !== 12) h += 12;
   if (ampm.toUpperCase() === "AM" && h === 12) h = 0;
   return `${pad(h)}:${pad(m)}:00`;
 }
-function slotStartFromRange(rangeStr) {
-  // "8:30 AM - 9:30 AM" -> "8:30 AM"
-  return rangeStr.split("-")[0].trim();
-}
+function slotStartFromRange(rangeStr) { return rangeStr.split("-")[0].trim(); }
 
-/* ====================
-   Week range (baseline Monday)
-   ==================== */
+/* Week range baseline */
 function getWeekRange(weekIndex = 0) {
-  const base = new Date("2025-08-04"); // Monday baseline
+  const base = new Date("2025-08-04");
   const start = new Date(base);
   start.setDate(base.getDate() + weekIndex * 7);
   const end = new Date(start);
@@ -267,9 +234,7 @@ function getWeekRange(weekIndex = 0) {
   return { start, end };
 }
 
-/* ====================
-   Populate week dropdown
-   ==================== */
+/* Populate week dropdown */
 function populateWeekDropdown() {
   const selector = document.getElementById("weekSelector");
   selector.innerHTML = "";
@@ -285,6 +250,134 @@ function populateWeekDropdown() {
     selector.appendChild(option);
   }
   selector.value = currentWeekIndex;
+}
+
+/* ========== Server (Google Sheets) API helpers ========== */
+
+async function apiGetBookings() {
+  try {
+    const res = await fetch(SCRIPT_URL);
+    const data = await res.json();
+    // data is array of objects keyed by sheet headers
+    return data;
+  } catch (err) {
+    console.error("Failed to fetch bookings from sheet:", err);
+    throw err;
+  }
+}
+
+async function apiPost(payload) {
+  try {
+    const res = await fetch(SCRIPT_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    // Apps Script returns JSON
+    return await res.json();
+  } catch (err) {
+    console.error("API POST failed:", err);
+    throw err;
+  }
+}
+
+/* Load bookings from Google Sheet and normalize */
+async function loadBookingsFromSheet() {
+  try {
+    const rows = await apiGetBookings(); // array of objects from sheet
+    bookings = rows.map(r => ({
+      id: String(r.id || r.ID || r.Id || ''),
+      machine: r.machine || r.Machine || '',
+      name: r.name || r.Name || '',
+      room: r.room || r.Room || '',
+      date: r.date || r.Date || '',
+      time: r.time || r.Time || '',
+      reference: r.reference || r.Reference || '',
+      status: r.status || r.Status || 'Processing'
+    }));
+    // persist a copy locally (fallback)
+    localStorage.setItem("bookings", JSON.stringify(bookings));
+    console.log("Loaded bookings from sheet:", bookings.length);
+  } catch (err) {
+    // fallback to localStorage if sheet unreachable
+    console.warn("Using localStorage fallback for bookings.");
+    bookings = JSON.parse(localStorage.getItem("bookings") || "[]");
+  }
+}
+
+/* Save booking to Google Sheet */
+async function saveBookingToSheet(booking) {
+  try {
+    const payload = { action: "add", ...booking };
+    const resp = await apiPost(payload);
+    if (resp.result === 'success' || resp.id) {
+      // if server assigned ID, keep it; otherwise keep our generated id
+      if (resp.id) booking.id = resp.id;
+      bookings.push(booking);
+      localStorage.setItem("bookings", JSON.stringify(bookings));
+      return true;
+    } else {
+      console.error("Sheet add failed:", resp);
+      return false;
+    }
+  } catch (err) {
+    console.error("Failed to save booking to sheet:", err);
+    // fallback: save locally so user still sees booking on their browser
+    bookings.push(booking);
+    localStorage.setItem("bookings", JSON.stringify(bookings));
+    return false;
+  }
+}
+
+/* Update booking fields on sheet (e.g., status) */
+async function updateBookingFieldOnSheet(id, fields) {
+  try {
+    const resp = await apiPost({ action: "update", id, fields });
+    if (resp.result === 'success') {
+      const idx = bookings.findIndex(b => b.id === id);
+      if (idx !== -1) {
+        Object.assign(bookings[idx], fields);
+        localStorage.setItem("bookings", JSON.stringify(bookings));
+      }
+      return true;
+    }
+    return false;
+  } catch (err) {
+    console.error("updateBookingFieldOnSheet error:", err);
+    return false;
+  }
+}
+
+/* Delete booking on sheet */
+async function deleteBookingOnSheet(id) {
+  try {
+    const resp = await apiPost({ action: "delete", id });
+    if (resp.result === 'success') {
+      bookings = bookings.filter(b => b.id !== id);
+      localStorage.setItem("bookings", JSON.stringify(bookings));
+      return true;
+    }
+    return false;
+  } catch (err) {
+    console.error("deleteBookingOnSheet error:", err);
+    return false;
+  }
+}
+
+/* Reset all bookings on sheet */
+async function resetAllBookingsOnSheet() {
+  try {
+    const resp = await apiPost({ action: "reset" });
+    if (resp.result === 'success') {
+      bookings = [];
+      localStorage.setItem("bookings", JSON.stringify(bookings));
+      return true;
+    }
+    return false;
+  } catch (err) {
+    console.error("resetAllBookingsOnSheet error:", err);
+    return false;
+  }
 }
 
 /* ====================
@@ -345,7 +438,7 @@ function updateTimeSlots() {
 }
 
 /* ====================
-   Booking flow
+   Booking flow (UI)
    ==================== */
 function startBooking() {
   const name = document.getElementById("name").value.trim();
@@ -361,7 +454,6 @@ function startBooking() {
     return;
   }
 
-  // Block same-day or past-day bookings
   const today = new Date(); const sel = new Date(date + "T00:00:00");
   today.setHours(0,0,0,0); sel.setHours(0,0,0,0);
   if (sel <= today) {
@@ -369,14 +461,16 @@ function startBooking() {
     return;
   }
 
-  // Prevent booking a time already booked for this machine
   const conflict = bookings.some(b => b.machine === machine && b.date === date && b.time === time);
   if (conflict) {
     error.textContent = "This time slot is already booked for the selected machine.";
     return;
   }
 
-  tempBooking = { id: 'b_' + Date.now() + '_' + Math.floor(Math.random()*1000), machine, name, room, date, time, reference: "", status: "Processing" };
+  tempBooking = {
+    id: 'b_' + Date.now() + '_' + Math.floor(Math.random()*1000),
+    machine, name, room, date, time, reference: "", status: "Processing"
+  };
   document.getElementById("paymentDialog").showModal();
 }
 
@@ -396,12 +490,18 @@ function proceedToConfirmation() {
   document.getElementById("confirmDialog").showModal();
 }
 
-function confirmBooking() {
-  bookings.push(tempBooking);
-  localStorage.setItem("bookings", JSON.stringify(bookings));
+async function confirmBooking() {
   document.getElementById("confirmDialog").close();
-  alert("Booking confirmed!");
-  // clear form inputs
+
+  // Save to sheet (or fallback local)
+  const ok = await saveBookingToSheet(tempBooking);
+  if (ok) {
+    alert("Booking confirmed!");
+  } else {
+    alert("Booking saved locally (sheet unavailable).");
+  }
+
+  // reset inputs
   document.getElementById("name").value = "";
   document.getElementById("room").value = "";
   document.getElementById("date").value = "";
@@ -411,7 +511,7 @@ function confirmBooking() {
 }
 
 /* ====================
-   Render weekly bookings for selected viewMachine
+   Render weekly bookings
    ==================== */
 function renderBookings() {
   const weekIndex = parseInt(document.getElementById("weekSelector").value || 0);
@@ -439,7 +539,6 @@ function renderBookings() {
     const dayBlock = document.createElement("div");
     dayBlock.appendChild(dayHeader);
 
-    // filter bookings for this date AND machine
     const dayBookings = bookings
       .map((b) => ({ ...b }))
       .filter(b => b.machine === viewMachine && b.date === ymd)
@@ -458,7 +557,12 @@ function renderBookings() {
           const cancelBtn = document.createElement("button");
           cancelBtn.className = "cancel-button";
           cancelBtn.textContent = "Cancel";
-          cancelBtn.onclick = () => cancelBookingById(b.id);
+          cancelBtn.onclick = async () => {
+            if (!confirm("Cancel this booking?")) return;
+            const ok = await deleteBookingOnSheet(b.id);
+            if (!ok) alert("Failed to cancel on server. Booking removed locally.");
+            renderBookings();
+          };
           li.appendChild(cancelBtn);
 
           const statusSelect = document.createElement("select");
@@ -467,7 +571,12 @@ function renderBookings() {
             if (b.status === s) opt.selected = true;
             statusSelect.appendChild(opt);
           });
-          statusSelect.onchange = (e) => updateStatusById(b.id, e.target.value);
+          statusSelect.onchange = async (e) => {
+            const newStatus = e.target.value;
+            const ok = await updateBookingFieldOnSheet(b.id, { status: newStatus });
+            if (!ok) alert("Failed to update status on server; update stored locally.");
+            renderBookings();
+          };
           statusSelect.style.marginLeft = "10px";
           li.appendChild(statusSelect);
         }
@@ -481,21 +590,19 @@ function renderBookings() {
 }
 
 /* ====================
-   Admin actions: id-based ops
+   Admin actions
    ==================== */
-function cancelBookingById(id) {
+async function cancelBookingById(id) {
   if (!isAdmin) return alert("Only admin can cancel bookings.");
   if (!confirm("Are you sure you want to cancel this booking?")) return;
-  bookings = bookings.filter(b => b.id !== id);
-  localStorage.setItem("bookings", JSON.stringify(bookings));
+  const ok = await deleteBookingOnSheet(id);
+  if (!ok) alert("Failed to delete on server; removed locally.");
   renderBookings();
 }
 
-function updateStatusById(id, status) {
-  const idx = bookings.findIndex(b => b.id === id);
-  if (idx === -1) return;
-  bookings[idx].status = status;
-  localStorage.setItem("bookings", JSON.stringify(bookings));
+async function updateStatusById(id, status) {
+  const ok = await updateBookingFieldOnSheet(id, { status });
+  if (!ok) alert("Failed to update status on server; update stored locally.");
   renderBookings();
 }
 
@@ -532,15 +639,15 @@ function logoutAdmin() {
   renderBookings();
 }
 
-function resetAllBookings() {
+async function resetAllBookings() {
   if (!confirm("Are you sure you want to delete ALL bookings? This cannot be undone.")) return;
-  bookings = [];
-  localStorage.setItem("bookings", JSON.stringify(bookings));
+  const ok = await resetAllBookingsOnSheet();
+  if (!ok) alert("Failed to reset on server; bookings cleared locally.");
   renderBookings();
 }
 
 /* ====================
-   Export to CSV for admin
+   Export CSV
    ==================== */
 document.getElementById("exportCSVBtn").addEventListener("click", () => {
   if (!isAdmin) return alert("Only admin can export.");
@@ -549,33 +656,23 @@ document.getElementById("exportCSVBtn").addEventListener("click", () => {
   const csv = rows.map(r => r.map(cell => `"${String(cell).replace(/"/g,'""')}"`).join(",")).join("\n");
   const blob = new Blob([csv], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url; a.download = 'bookings.csv'; a.click();
+  const a = document.createElement("a"); a.href = url; a.download = 'bookings.csv'; a.click();
   URL.revokeObjectURL(url);
 });
 
 /* ====================
-   Utilities & Init
+   Init
    ==================== */
 document.getElementById("machine").addEventListener("change", updateTimeSlots);
 document.getElementById("date").addEventListener("change", updateTimeSlots);
 document.getElementById("viewMachine").addEventListener("change", renderBookings);
 
-// Normalize old bookings and ensure id/status exist:
-bookings = bookings.map(b => {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(b.date)) {
-    const d = new Date(b.date);
-    if (!isNaN(d)) {
-      b.date = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-    }
-  }
-  if (!b.id) b.id = 'b_' + Date.now() + '_' + Math.floor(Math.random()*1000);
-  if (!b.status) b.status = b.status || "Processing";
-  return b;
-});
-
-populateWeekDropdown();
-renderBookings();
+(async function init() {
+  populateWeekDropdown();
+  // load bookings from Server (Google Sheets)
+  await loadBookingsFromSheet();
+  renderBookings();
+})();
 </script>
 </body>
 </html>
