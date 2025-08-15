@@ -41,11 +41,16 @@
     .form-row label { margin-bottom: 6px; font-size: 14px; }
     @media (max-width: 600px) { .form-row { flex-direction: column; gap: 10px; } }
     .muted { color:#666; font-size:13px; }
+
+    /* small server-status message */
+    #serverStatus { font-size:13px; margin-bottom:12px; color:#666; }
   </style>
 </head>
 <body>
   <h2>Accomm Laundry Reservation</h2>
   <div class="small">Select machine, pick a future date, then choose time (schedule depends on machine & weekday).</div>
+
+  <div id="serverStatus">Loading bookings…</div>
 
   <!-- Booking form -->
   <div class="top-row">
@@ -158,11 +163,11 @@
   </dialog>
 
 <script>
-/* ------------- IMPORTANT: set this to your Apps Script Web App URL ------------- */
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwQjrfaPQxRVAIJ4e0gFzso86MEsQIzZy1Zu0RFa-WK_SK3At2t3pcnGY2t55SS_EZt8A/exec"; // <- Replace with your deployed Apps Script URL
-/* ----------------------------------------------------------------------------- */
+/* ------------- IMPORTANT: your Apps Script Web App URL ------------- */
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwQjrfaPQxRVAIJ4e0gFzso86MEsQIzZy1Zu0RFa-WK_SK3At2t3pcnGY2t55SS_EZt8A/exec";
+/* ------------------------------------------------------------------ */
 
-/* SCHEDULES */
+/* SCHEDULES (unchanged) */
 const schedules = {
   "Brothers Washer": {
     "Sunday": ["8:00 AM - 9:00 AM","9:00 AM - 10:00 AM"],
@@ -204,7 +209,7 @@ const schedules = {
 
 /* App state */
 let isAdmin = false;
-let bookings = []; // <-- will be loaded from Google Sheets
+let bookings = []; // loaded from Google Sheets (or fallback localStorage)
 let tempBooking = {};
 
 /* Helpers */
@@ -255,36 +260,30 @@ function populateWeekDropdown() {
 /* ========== Server (Google Sheets) API helpers ========== */
 
 async function apiGetBookings() {
-  try {
-    const res = await fetch(SCRIPT_URL);
-    const data = await res.json();
-    // data is array of objects keyed by sheet headers
-    return data;
-  } catch (err) {
-    console.error("Failed to fetch bookings from sheet:", err);
-    throw err;
-  }
+  // cache-busting query param to avoid stale response
+  const url = SCRIPT_URL + '?t=' + Date.now();
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Network response not ok: ' + res.status);
+  return res.json();
 }
 
 async function apiPost(payload) {
-  try {
-    const res = await fetch(SCRIPT_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-    // Apps Script returns JSON
-    return await res.json();
-  } catch (err) {
-    console.error("API POST failed:", err);
-    throw err;
-  }
+  const res = await fetch(SCRIPT_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) throw new Error('POST failed: ' + res.status);
+  return res.json();
 }
 
 /* Load bookings from Google Sheet and normalize */
 async function loadBookingsFromSheet() {
+  const serverStatus = document.getElementById("serverStatus");
+  serverStatus.textContent = "Loading bookings from server…";
   try {
     const rows = await apiGetBookings(); // array of objects from sheet
+    // normalize header variations
     bookings = rows.map(r => ({
       id: String(r.id || r.ID || r.Id || ''),
       machine: r.machine || r.Machine || '',
@@ -295,12 +294,15 @@ async function loadBookingsFromSheet() {
       reference: r.reference || r.Reference || '',
       status: r.status || r.Status || 'Processing'
     }));
-    // persist a copy locally (fallback)
     localStorage.setItem("bookings", JSON.stringify(bookings));
     console.log("Loaded bookings from sheet:", bookings.length);
+    serverStatus.textContent = `Loaded ${bookings.length} bookings from server`;
+    serverStatus.style.color = "#333";
   } catch (err) {
+    console.warn("Failed to load bookings from server:", err);
+    serverStatus.textContent = "Server unavailable — using local data (offline mode)";
+    serverStatus.style.color = "orange";
     // fallback to localStorage if sheet unreachable
-    console.warn("Using localStorage fallback for bookings.");
     bookings = JSON.parse(localStorage.getItem("bookings") || "[]");
   }
 }
@@ -310,19 +312,18 @@ async function saveBookingToSheet(booking) {
   try {
     const payload = { action: "add", ...booking };
     const resp = await apiPost(payload);
-    if (resp.result === 'success' || resp.id) {
-      // if server assigned ID, keep it; otherwise keep our generated id
+    if (resp && (resp.result === 'success' || resp.id)) {
       if (resp.id) booking.id = resp.id;
-      bookings.push(booking);
-      localStorage.setItem("bookings", JSON.stringify(bookings));
+      // refresh list from server to be sure we have canonical data
+      await loadBookingsFromSheet();
       return true;
     } else {
-      console.error("Sheet add failed:", resp);
+      console.error("Sheet add returned:", resp);
       return false;
     }
   } catch (err) {
     console.error("Failed to save booking to sheet:", err);
-    // fallback: save locally so user still sees booking on their browser
+    // fallback: store locally so user sees the booking
     bookings.push(booking);
     localStorage.setItem("bookings", JSON.stringify(bookings));
     return false;
@@ -333,12 +334,10 @@ async function saveBookingToSheet(booking) {
 async function updateBookingFieldOnSheet(id, fields) {
   try {
     const resp = await apiPost({ action: "update", id, fields });
-    if (resp.result === 'success') {
+    if (resp && resp.result === 'success') {
+      // update local copy
       const idx = bookings.findIndex(b => b.id === id);
-      if (idx !== -1) {
-        Object.assign(bookings[idx], fields);
-        localStorage.setItem("bookings", JSON.stringify(bookings));
-      }
+      if (idx !== -1) { Object.assign(bookings[idx], fields); localStorage.setItem("bookings", JSON.stringify(bookings)); }
       return true;
     }
     return false;
@@ -352,7 +351,7 @@ async function updateBookingFieldOnSheet(id, fields) {
 async function deleteBookingOnSheet(id) {
   try {
     const resp = await apiPost({ action: "delete", id });
-    if (resp.result === 'success') {
+    if (resp && resp.result === 'success') {
       bookings = bookings.filter(b => b.id !== id);
       localStorage.setItem("bookings", JSON.stringify(bookings));
       return true;
@@ -368,7 +367,7 @@ async function deleteBookingOnSheet(id) {
 async function resetAllBookingsOnSheet() {
   try {
     const resp = await apiPost({ action: "reset" });
-    if (resp.result === 'success') {
+    if (resp && resp.result === 'success') {
       bookings = [];
       localStorage.setItem("bookings", JSON.stringify(bookings));
       return true;
@@ -550,7 +549,7 @@ function renderBookings() {
       const ul = document.createElement("ul");
       dayBookings.forEach(b => {
         const li = document.createElement("li");
-        const statusClass = b.status.toLowerCase();
+        const statusClass = b.status ? b.status.toLowerCase() : 'processing';
         li.innerHTML = `${b.time} - ${b.name} (Room ${b.room}) | Ref: ${b.reference} | <span class="status-${statusClass}">${b.status}</span>`;
 
         if (isAdmin) {
@@ -669,7 +668,6 @@ document.getElementById("viewMachine").addEventListener("change", renderBookings
 
 (async function init() {
   populateWeekDropdown();
-  // load bookings from Server (Google Sheets)
   await loadBookingsFromSheet();
   renderBookings();
 })();
