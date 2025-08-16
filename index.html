@@ -35,24 +35,17 @@
     .badge.completed { background: #d1e7dd; color:#0f5132; }
     .top-row { display:flex; gap:16px; align-items:center; margin-bottom:12px; }
     @media (max-width:900px) { .top-row { flex-direction: column; } .controls { flex-direction: column; } }
-
     .form-row { display: flex; gap: 18px; margin-top: 6px; align-items: flex-start; }
     .form-row .field { flex: 1; min-width: 0; display: flex; flex-direction: column; }
     .form-row label { margin-bottom: 6px; font-size: 14px; }
     @media (max-width: 600px) { .form-row { flex-direction: column; gap: 10px; } }
     .muted { color:#666; font-size:13px; }
-
-    /* small server-status message */
-    #serverStatus { font-size:13px; margin-bottom:12px; color:#666; }
   </style>
 </head>
 <body>
   <h2>Accomm Laundry Reservation</h2>
   <div class="small">Select machine, pick a future date, then choose time (schedule depends on machine & weekday).</div>
 
-  <div id="serverStatus">Loading bookings…</div>
-
-  <!-- Booking form -->
   <div class="top-row">
     <div style="flex:1">
       <label for="machine">Machine</label>
@@ -63,7 +56,6 @@
         <option>Sisters Dryer</option>
       </select>
     </div>
-
     <div style="flex:2">
       <div class="form-row">
         <div class="field">
@@ -85,9 +77,7 @@
     </div>
     <div class="col">
       <label for="time">Time slot</label>
-      <select id="time">
-        <option value="">-- Select a Time Slot --</option>
-      </select>
+      <select id="time"><option value="">-- Select a Time Slot --</option></select>
     </div>
   </div>
 
@@ -98,7 +88,7 @@
   <dialog id="paymentDialog">
     <h3>Step 2: GCash Payment</h3>
     <p><strong>GCash Number:</strong> 0916-421-9818</p>
-    <p><img src="https://upload.wikimedia.org/wikipedia/commons/d/d0/QR_code_for_mobile_English_Wikipedia.svg" alt="QR Code" style="width:100%; max-width:250px;"></p>
+    <p><img src="https://upload.wikimedia.org/wikipedia/commons/d/d0/QR_code_for_mobile_English_Wikipedia.svg" style="width:100%;max-width:250px;"></p>
     <input type="text" id="reference" placeholder="Enter GCash Reference Number" />
     <div style="text-align:right; margin-top: 12px;">
       <button onclick="proceedToConfirmation()">Next</button>
@@ -130,9 +120,7 @@
       <option>Sisters Washer</option>
       <option>Sisters Dryer</option>
     </select>
-
     <select id="weekSelector" onchange="renderBookings()"></select>
-
     <button id="adminLoginBtn" onclick="loginAsAdmin()">🔐 Admin</button>
     <button id="adminLogoutBtn" onclick="logoutAdmin()" style="display:none;">🚪 Logout</button>
     <button id="exportCSVBtn" style="display:none; background:#007bff">Export CSV</button>
@@ -146,10 +134,8 @@
   </div>
 
   <div class="bookings"><h3>Weekly Booking Schedule</h3><div id="weeklySchedule"></div></div>
-
   <button id="resetBookingsBtn" class="reset-button" style="display:none;" onclick="resetAllBookings()">Reset All Bookings</button>
 
-  <!-- Admin Dialog -->
   <dialog id="adminDialog">
     <form method="dialog" id="adminForm">
       <h3>Admin Login</h3>
@@ -162,515 +148,172 @@
     </form>
   </dialog>
 
-<script>
-/* ------------- IMPORTANT: your Apps Script Web App URL ------------- */
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwQjrfaPQxRVAIJ4e0gFzso86MEsQIzZy1Zu0RFa-WK_SK3At2t3pcnGY2t55SS_EZt8A/exec";
-/* ------------------------------------------------------------------ */
-
-/* SCHEDULES (unchanged) */
-const schedules = {
-  "Brothers Washer": {
-    "Sunday": ["8:00 AM - 9:00 AM","9:00 AM - 10:00 AM"],
-    "Monday": ["8:30 AM - 9:30 AM","9:30 AM - 10:30 AM","10:30 AM - 11:30 AM"],
-    "Tuesday": ["1:00 PM - 2:00 PM","2:00 PM - 3:00 PM"],
-    "Wednesday": ["8:00 AM - 9:00 AM","9:00 AM - 10:00 AM"],
-    "Thursday": ["3:00 PM - 4:00 PM"],
-    "Friday": ["8:00 AM - 9:00 AM","9:00 AM - 10:00 AM"],
-    "Saturday": ["10:00 AM - 11:00 AM"]
-  },
-  "Brothers Dryer": {
-    "Sunday": ["8:15 AM - 9:00 AM","9:15 AM - 10:00 AM"],
-    "Monday": ["8:45 AM - 9:30 AM","9:45 AM - 10:30 AM"],
-    "Tuesday": ["1:15 PM - 2:00 PM","2:15 PM - 3:00 PM"],
-    "Wednesday": ["8:15 AM - 9:00 AM"],
-    "Thursday": ["3:15 PM - 4:00 PM"],
-    "Friday": ["8:15 AM - 9:00 AM"],
-    "Saturday": ["10:15 AM - 11:00 AM"]
-  },
-  "Sisters Washer": {
-    "Sunday": [],
-    "Monday": ["1:00 PM - 2:00 PM","2:00 PM - 3:00 PM"],
-    "Tuesday": ["7:00 AM - 8:00 AM"],
-    "Wednesday": ["1:00 PM - 2:00 PM"],
-    "Thursday": ["4:00 PM - 5:00 PM"],
-    "Friday": ["2:00 PM - 3:00 PM"],
-    "Saturday": ["9:00 AM - 10:00 AM"]
-  },
-  "Sisters Dryer": {
-    "Sunday": [],
-    "Monday": ["1:30 PM - 2:15 PM","2:30 PM - 3:15 PM"],
-    "Tuesday": ["7:30 AM - 8:15 AM"],
-    "Wednesday": ["1:30 PM - 2:15 PM"],
-    "Thursday": ["4:15 PM - 5:00 PM"],
-    "Friday": ["2:30 PM - 3:15 PM"],
-    "Saturday": ["9:30 AM - 10:15 AM"]
-  }
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/9.24.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.24.0/firebase-database-compat.js"></script>
+  <script>
+    // ========== FIREBASE CONFIG ==========
+const firebaseConfig = {
+  apiKey: "AIzaSyDT9l-MJ1SJEPF8d2B4Bc0TsrDN1KUdAd0",
+  authDomain: "laundrybooking-a986c.firebaseapp.com",
+  databaseURL: "https://laundrybooking-a986c-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "laundrybooking-a986c",
+  storageBucket: "laundrybooking-a986c.firebasestorage.app",
+  messagingSenderId: "927511306519",
+  appId: "1:927511306519:web:a360357bcade0d45409752"
 };
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+  </script>
 
-/* App state */
-let isAdmin = false;
-let bookings = []; // loaded from Google Sheets (or fallback localStorage)
-let tempBooking = {};
+  <script>
+    // ===================== SCHEDULES =====================
+    const schedules = {
+      "Brothers Washer": { "Sunday":["8:00 AM - 9:00 AM","9:00 AM - 10:00 AM"],"Monday":["8:30 AM - 9:30 AM","9:30 AM - 10:30 AM","10:30 AM - 11:30 AM"],"Tuesday":["1:00 PM - 2:00 PM","2:00 PM - 3:00 PM"],"Wednesday":["8:00 AM - 9:00 AM","9:00 AM - 10:00 AM"],"Thursday":["3:00 PM - 4:00 PM"],"Friday":["8:00 AM - 9:00 AM","9:00 AM - 10:00 AM"],"Saturday":["10:00 AM - 11:00 AM"]},
+      "Brothers Dryer": { "Sunday":["8:15 AM - 9:00 AM","9:15 AM - 10:00 AM"],"Monday":["8:45 AM - 9:30 AM","9:45 AM - 10:30 AM"],"Tuesday":["1:15 PM - 2:00 PM","2:15 PM - 3:00 PM"],"Wednesday":["8:15 AM - 9:00 AM"],"Thursday":["3:15 PM - 4:00 PM"],"Friday":["8:15 AM - 9:00 AM"],"Saturday":["10:15 AM - 11:00 AM"]},
+      "Sisters Washer": { "Sunday":[],"Monday":["1:00 PM - 2:00 PM","2:00 PM - 3:00 PM"],"Tuesday":["7:00 AM - 8:00 AM"],"Wednesday":["1:00 PM - 2:00 PM"],"Thursday":["4:00 PM - 5:00 PM"],"Friday":["2:00 PM - 3:00 PM"],"Saturday":["9:00 AM - 10:00 AM"]},
+      "Sisters Dryer": { "Sunday":[],"Monday":["1:30 PM - 2:15 PM","2:30 PM - 3:15 PM"],"Tuesday":["7:30 AM - 8:15 AM"],"Wednesday":["1:30 PM - 2:15 PM"],"Thursday":["4:15 PM - 5:00 PM"],"Friday":["2:30 PM - 3:15 PM"],"Saturday":["9:30 AM - 10:15 AM"]}
+    };
 
-/* Helpers */
-function pad(n){ return n<10?'0'+n:n; }
-function weekdayNameFromDate(dateStr) {
-  const d = new Date(dateStr + 'T00:00:00');
-  return ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][d.getDay()];
-}
-function convertStartTo24(timeSlotStart) {
-  const parts = timeSlotStart.trim().split(" ");
-  if (parts.length < 2) return null;
-  const [time, ampm] = parts;
-  let [h,m] = time.split(":"); h = parseInt(h,10); m = parseInt(m||0,10);
-  if (ampm.toUpperCase() === "PM" && h !== 12) h += 12;
-  if (ampm.toUpperCase() === "AM" && h === 12) h = 0;
-  return `${pad(h)}:${pad(m)}:00`;
-}
-function slotStartFromRange(rangeStr) { return rangeStr.split("-")[0].trim(); }
+    let isAdmin = false;
+    let bookings = [];
+    let tempBooking = {};
 
-/* Week range baseline */
-function getWeekRange(weekIndex = 0) {
-  const base = new Date("2025-08-04");
-  const start = new Date(base);
-  start.setDate(base.getDate() + weekIndex * 7);
-  const end = new Date(start);
-  end.setDate(start.getDate() + 6);
-  return { start, end };
-}
+    // ========== HELPERS ==========
+    function pad(n){ return n<10?'0'+n:n; }
+    function weekdayNameFromDate(dateStr){ const d=new Date(dateStr+'T00:00:00'); return ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][d.getDay()]; }
+    function slotStartFromRange(rangeStr){ return rangeStr.split("-")[0].trim(); }
+    function convertStartTo24(timeSlotStart){
+      const parts = timeSlotStart.trim().split(" "); if(parts.length<2) return null;
+      const [time,ampm]=parts; let [h,m]=time.split(":").map(Number); if(ampm=="PM"&&h<12)h+=12;if(ampm=="AM"&&h==12)h=0; return {h,m}; }
 
-/* Populate week dropdown */
-function populateWeekDropdown() {
-  const selector = document.getElementById("weekSelector");
-  selector.innerHTML = "";
-  const today = new Date();
-  let currentWeekIndex = 0;
-  for (let i = 0; i < 24; i++) {
-    const range = getWeekRange(i);
-    const isCurrent = today >= range.start && today <= range.end;
-    const option = document.createElement("option");
-    option.value = i;
-    option.text = `Week ${i+1} (${range.start.toLocaleDateString()} - ${range.end.toLocaleDateString()})${isCurrent ? " (Current)" : ""}`;
-    if (isCurrent) currentWeekIndex = i;
-    selector.appendChild(option);
-  }
-  selector.value = currentWeekIndex;
-}
+    // ===================== UPDATE TIME SLOTS =====================
+    function updateTimeSlots(){
+      const machine=document.getElementById("machine").value;
+      const date=document.getElementById("date").value;
+      const slotSelect=document.getElementById("time");
+      slotSelect.innerHTML='<option value="">-- Select a Time Slot --</option>';
+      if(!date)return;
 
-/* ========== Server (Google Sheets) API helpers ========== */
+      const weekday=weekdayNameFromDate(date);
+      const available=schedules[machine][weekday]||[];
 
-async function apiGetBookings() {
-  // cache-busting query param to avoid stale response
-  const url = SCRIPT_URL + '?t=' + Date.now();
-  const res = await fetch(url);
-  if (!res.ok) throw new Error('Network response not ok: ' + res.status);
-  return res.json();
-}
-
-async function apiPost(payload) {
-  const res = await fetch(SCRIPT_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
-  if (!res.ok) throw new Error('POST failed: ' + res.status);
-  return res.json();
-}
-
-/* Load bookings from Google Sheet and normalize */
-async function loadBookingsFromSheet() {
-  const serverStatus = document.getElementById("serverStatus");
-  serverStatus.textContent = "Loading bookings from server…";
-  try {
-    const rows = await apiGetBookings(); // array of objects from sheet
-    // normalize header variations
-    bookings = rows.map(r => ({
-      id: String(r.id || r.ID || r.Id || ''),
-      machine: r.machine || r.Machine || '',
-      name: r.name || r.Name || '',
-      room: r.room || r.Room || '',
-      date: r.date || r.Date || '',
-      time: r.time || r.Time || '',
-      reference: r.reference || r.Reference || '',
-      status: r.status || r.Status || 'Processing'
-    }));
-    localStorage.setItem("bookings", JSON.stringify(bookings));
-    console.log("Loaded bookings from sheet:", bookings.length);
-    serverStatus.textContent = `Loaded ${bookings.length} bookings from server`;
-    serverStatus.style.color = "#333";
-  } catch (err) {
-    console.warn("Failed to load bookings from server:", err);
-    serverStatus.textContent = "Server unavailable — using local data (offline mode)";
-    serverStatus.style.color = "orange";
-    // fallback to localStorage if sheet unreachable
-    bookings = JSON.parse(localStorage.getItem("bookings") || "[]");
-  }
-}
-
-/* Save booking to Google Sheet */
-async function saveBookingToSheet(booking) {
-  try {
-    const payload = { action: "add", ...booking };
-    const resp = await apiPost(payload);
-    if (resp && (resp.result === 'success' || resp.id)) {
-      if (resp.id) booking.id = resp.id;
-      // refresh list from server to be sure we have canonical data
-      await loadBookingsFromSheet();
-      return true;
-    } else {
-      console.error("Sheet add returned:", resp);
-      return false;
-    }
-  } catch (err) {
-    console.error("Failed to save booking to sheet:", err);
-    // fallback: store locally so user sees the booking
-    bookings.push(booking);
-    localStorage.setItem("bookings", JSON.stringify(bookings));
-    return false;
-  }
-}
-
-/* Update booking fields on sheet (e.g., status) */
-async function updateBookingFieldOnSheet(id, fields) {
-  try {
-    const resp = await apiPost({ action: "update", id, fields });
-    if (resp && resp.result === 'success') {
-      // update local copy
-      const idx = bookings.findIndex(b => b.id === id);
-      if (idx !== -1) { Object.assign(bookings[idx], fields); localStorage.setItem("bookings", JSON.stringify(bookings)); }
-      return true;
-    }
-    return false;
-  } catch (err) {
-    console.error("updateBookingFieldOnSheet error:", err);
-    return false;
-  }
-}
-
-/* Delete booking on sheet */
-async function deleteBookingOnSheet(id) {
-  try {
-    const resp = await apiPost({ action: "delete", id });
-    if (resp && resp.result === 'success') {
-      bookings = bookings.filter(b => b.id !== id);
-      localStorage.setItem("bookings", JSON.stringify(bookings));
-      return true;
-    }
-    return false;
-  } catch (err) {
-    console.error("deleteBookingOnSheet error:", err);
-    return false;
-  }
-}
-
-/* Reset all bookings on sheet */
-async function resetAllBookingsOnSheet() {
-  try {
-    const resp = await apiPost({ action: "reset" });
-    if (resp && resp.result === 'success') {
-      bookings = [];
-      localStorage.setItem("bookings", JSON.stringify(bookings));
-      return true;
-    }
-    return false;
-  } catch (err) {
-    console.error("resetAllBookingsOnSheet error:", err);
-    return false;
-  }
-}
-
-/* ====================
-   Update time slots whenever machine or date changes
-   ==================== */
-function updateTimeSlots() {
-  const dateVal = document.getElementById("date").value; // YYYY-MM-DD
-  const timeSelect = document.getElementById("time");
-  const machine = document.getElementById("machine").value;
-  const err = document.getElementById("errorMessage");
-  timeSelect.innerHTML = '<option value="">-- Select a Time Slot --</option>';
-  err.textContent = "";
-
-  if (!dateVal || !machine) return;
-
-  const weekday = weekdayNameFromDate(dateVal);
-  const machineSchedule = (schedules[machine] && schedules[machine][weekday]) || [];
-
-  if (!machineSchedule || machineSchedule.length === 0) {
-    const opt = document.createElement("option");
-    opt.value = "";
-    opt.textContent = `No schedule for ${machine} on ${weekday}`;
-    opt.disabled = true;
-    timeSelect.appendChild(opt);
-    return;
-  }
-
-  const now = new Date();
-  const selectedDay = new Date(dateVal + "T00:00:00");
-
-  machineSchedule.forEach(slot => {
-    const option = document.createElement("option");
-    option.value = slot;
-    option.textContent = slot;
-
-    // disable if already booked for this machine+date+time
-    const isBooked = bookings.some(b => b.machine === machine && b.date === dateVal && b.time === slot);
-    if (isBooked) {
-      option.disabled = true;
-      option.textContent += " (Booked)";
-      timeSelect.appendChild(option);
-      return;
-    }
-
-    // If selecting today, disable past time slots by comparing start time
-    const slotStart = slotStartFromRange(slot);
-    if (selectedDay.toDateString() === now.toDateString()) {
-      const start24 = convertStartTo24(slotStart);
-      const slotDateTime = new Date(`${dateVal}T${start24}`);
-      if (slotDateTime < now) {
-        option.disabled = true;
-        option.textContent += " (Past)";
-      }
-    }
-
-    timeSelect.appendChild(option);
-  });
-}
-
-/* ====================
-   Booking flow (UI)
-   ==================== */
-function startBooking() {
-  const name = document.getElementById("name").value.trim();
-  const room = document.getElementById("room").value.trim();
-  const date = document.getElementById("date").value;
-  const time = document.getElementById("time").value;
-  const machine = document.getElementById("machine").value;
-  const error = document.getElementById("errorMessage");
-  error.textContent = "";
-
-  if (!name || !room || !date || !time || !machine) {
-    error.textContent = "Please complete all fields first.";
-    return;
-  }
-
-  const today = new Date(); const sel = new Date(date + "T00:00:00");
-  today.setHours(0,0,0,0); sel.setHours(0,0,0,0);
-  if (sel <= today) {
-    error.textContent = "Same-day or past bookings are not allowed. Please choose a future date.";
-    return;
-  }
-
-  const conflict = bookings.some(b => b.machine === machine && b.date === date && b.time === time);
-  if (conflict) {
-    error.textContent = "This time slot is already booked for the selected machine.";
-    return;
-  }
-
-  tempBooking = {
-    id: 'b_' + Date.now() + '_' + Math.floor(Math.random()*1000),
-    machine, name, room, date, time, reference: "", status: "Processing"
-  };
-  document.getElementById("paymentDialog").showModal();
-}
-
-function proceedToConfirmation() {
-  const ref = document.getElementById("reference").value.trim();
-  if (!ref) return alert("Please enter GCash reference number.");
-  tempBooking.reference = ref;
-
-  document.getElementById("cMachine").textContent = tempBooking.machine;
-  document.getElementById("cName").textContent = tempBooking.name;
-  document.getElementById("cRoom").textContent = tempBooking.room;
-  document.getElementById("cDate").textContent = tempBooking.date;
-  document.getElementById("cTime").textContent = tempBooking.time;
-  document.getElementById("cRef").textContent = tempBooking.reference;
-
-  document.getElementById("paymentDialog").close();
-  document.getElementById("confirmDialog").showModal();
-}
-
-async function confirmBooking() {
-  document.getElementById("confirmDialog").close();
-
-  // Save to sheet (or fallback local)
-  const ok = await saveBookingToSheet(tempBooking);
-  if (ok) {
-    alert("Booking confirmed!");
-  } else {
-    alert("Booking saved locally (sheet unavailable).");
-  }
-
-  // reset inputs
-  document.getElementById("name").value = "";
-  document.getElementById("room").value = "";
-  document.getElementById("date").value = "";
-  document.getElementById("time").innerHTML = '<option value="">-- Select a Time Slot --</option>';
-  document.getElementById("reference").value = "";
-  renderBookings();
-}
-
-/* ====================
-   Render weekly bookings
-   ==================== */
-function renderBookings() {
-  const weekIndex = parseInt(document.getElementById("weekSelector").value || 0);
-  const range = getWeekRange(weekIndex);
-  const weekStart = range.start;
-  const weeklyDiv = document.getElementById("weeklySchedule");
-  const weekDisplay = document.getElementById("weekDisplay");
-  weeklyDiv.innerHTML = "";
-  weekDisplay.textContent = `Showing bookings for: ${range.start.toLocaleDateString()} – ${range.end.toLocaleDateString()}`;
-
-  const viewMachine = document.getElementById("viewMachine").value;
-  const days = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
-  const today = new Date(); today.setHours(0,0,0,0);
-
-  for (let i=0;i<7;i++){
-    const thisDate = new Date(weekStart);
-    thisDate.setDate(weekStart.getDate() + i);
-    const thisDateStr = thisDate.toDateString();
-    const ymd = `${thisDate.getFullYear()}-${pad(thisDate.getMonth()+1)}-${pad(thisDate.getDate())}`;
-    const isToday = thisDateStr === today.toDateString();
-
-    const dayHeader = document.createElement("h4");
-    dayHeader.innerHTML = `${days[thisDate.getDay()]} ${isToday ? '<span class="today-badge">(Today)</span>' : ''}`;
-
-    const dayBlock = document.createElement("div");
-    dayBlock.appendChild(dayHeader);
-
-    const dayBookings = bookings
-      .map((b) => ({ ...b }))
-      .filter(b => b.machine === viewMachine && b.date === ymd)
-      .sort((a,b) => a.time.localeCompare(b.time));
-
-    if (dayBookings.length === 0) {
-      const p = document.createElement("p"); p.textContent = "No bookings."; dayBlock.appendChild(p);
-    } else {
-      const ul = document.createElement("ul");
-      dayBookings.forEach(b => {
-        const li = document.createElement("li");
-        const statusClass = b.status ? b.status.toLowerCase() : 'processing';
-        li.innerHTML = `${b.time} - ${b.name} (Room ${b.room}) | Ref: ${b.reference} | <span class="status-${statusClass}">${b.status}</span>`;
-
-        if (isAdmin) {
-          const cancelBtn = document.createElement("button");
-          cancelBtn.className = "cancel-button";
-          cancelBtn.textContent = "Cancel";
-          cancelBtn.onclick = async () => {
-            if (!confirm("Cancel this booking?")) return;
-            const ok = await deleteBookingOnSheet(b.id);
-            if (!ok) alert("Failed to cancel on server. Booking removed locally.");
-            renderBookings();
-          };
-          li.appendChild(cancelBtn);
-
-          const statusSelect = document.createElement("select");
-          ["Processing","Paid","Completed"].forEach(s => {
-            const opt = document.createElement("option"); opt.value = opt.text = s;
-            if (b.status === s) opt.selected = true;
-            statusSelect.appendChild(opt);
-          });
-          statusSelect.onchange = async (e) => {
-            const newStatus = e.target.value;
-            const ok = await updateBookingFieldOnSheet(b.id, { status: newStatus });
-            if (!ok) alert("Failed to update status on server; update stored locally.");
-            renderBookings();
-          };
-          statusSelect.style.marginLeft = "10px";
-          li.appendChild(statusSelect);
+      const today=new Date();
+      const selDate=new Date(date+"T00:00:00");
+      available.forEach(slot=>{
+        let disable=false;
+        if(selDate.toDateString()===today.toDateString()){
+          const {h,m}=convertStartTo24(slotStartFromRange(slot));
+          const slotTime=new Date(); slotTime.setHours(h,m,0,0);
+          if(slotTime<today) disable=true;
         }
-
-        ul.appendChild(li);
+        const option=document.createElement("option"); option.value=slot; option.textContent=slot;
+        if(disable) option.disabled=true;
+        slotSelect.appendChild(option);
       });
-      dayBlock.appendChild(ul);
     }
-    weeklyDiv.appendChild(dayBlock);
-  }
-}
 
-/* ====================
-   Admin actions
-   ==================== */
-async function cancelBookingById(id) {
-  if (!isAdmin) return alert("Only admin can cancel bookings.");
-  if (!confirm("Are you sure you want to cancel this booking?")) return;
-  const ok = await deleteBookingOnSheet(id);
-  if (!ok) alert("Failed to delete on server; removed locally.");
-  renderBookings();
-}
+    // ===================== BOOKING FLOW =====================
+    function startBooking(){
+      const name=document.getElementById("name").value.trim();
+      const room=document.getElementById("room").value.trim();
+      const date=document.getElementById("date").value;
+      const time=document.getElementById("time").value;
+      const machine=document.getElementById("machine").value;
+      if(!name||!room||!date||!time){ document.getElementById("errorMessage").textContent="All fields are required"; return;}
+      document.getElementById("errorMessage").textContent="";
 
-async function updateStatusById(id, status) {
-  const ok = await updateBookingFieldOnSheet(id, { status });
-  if (!ok) alert("Failed to update status on server; update stored locally.");
-  renderBookings();
-}
-
-function loginAsAdmin() {
-  const dialog = document.getElementById("adminDialog");
-  const form = document.getElementById("adminForm");
-  const input = document.getElementById("adminPassword");
-  const error = document.getElementById("adminError");
-  input.value = ""; error.textContent = "";
-  dialog.showModal();
-
-  form.onsubmit = function(e) {
-    e.preventDefault();
-    if (input.value === "admin123") {
-      isAdmin = true;
-      dialog.close();
-      document.getElementById("resetBookingsBtn").style.display = "inline-block";
-      document.getElementById("adminLoginBtn").style.display = "none";
-      document.getElementById("adminLogoutBtn").style.display = "inline-block";
-      document.getElementById("exportCSVBtn").style.display = "inline-block";
-      renderBookings();
-    } else {
-      error.textContent = "Incorrect password.";
+      tempBooking={id:Date.now(), machine,name,room,date,time,status:"Processing",reference:""};
+      document.getElementById("paymentDialog").showModal();
     }
-  };
-}
 
-function logoutAdmin() {
-  isAdmin = false;
-  document.getElementById("resetBookingsBtn").style.display = "none";
-  document.getElementById("adminLoginBtn").style.display = "inline-block";
-  document.getElementById("adminLogoutBtn").style.display = "none";
-  document.getElementById("exportCSVBtn").style.display = "none";
-  renderBookings();
-}
+    function proceedToConfirmation(){
+      const ref=document.getElementById("reference").value.trim();
+      if(!ref){ alert("Enter GCash reference number"); return;}
+      tempBooking.reference=ref;
+      document.getElementById("paymentDialog").close();
+      document.getElementById("cMachine").textContent=tempBooking.machine;
+      document.getElementById("cName").textContent=tempBooking.name;
+      document.getElementById("cRoom").textContent=tempBooking.room;
+      document.getElementById("cDate").textContent=tempBooking.date;
+      document.getElementById("cTime").textContent=tempBooking.time;
+      document.getElementById("cRef").textContent=tempBooking.reference;
+      document.getElementById("confirmDialog").showModal();
+    }
 
-async function resetAllBookings() {
-  if (!confirm("Are you sure you want to delete ALL bookings? This cannot be undone.")) return;
-  const ok = await resetAllBookingsOnSheet();
-  if (!ok) alert("Failed to reset on server; bookings cleared locally.");
-  renderBookings();
-}
+    function confirmBooking(){
+      const bookingRef=db.ref('bookings/'+tempBooking.id);
+      bookingRef.set(tempBooking).then(()=>{
+        alert("Booking confirmed!");
+        tempBooking={};
+        document.getElementById("name").value="";
+        document.getElementById("room").value="";
+        document.getElementById("date").value="";
+        document.getElementById("time").innerHTML='<option value="">-- Select a Time Slot --</option>';
+        document.getElementById("reference").value="";
+        document.getElementById("confirmDialog").close();
+        renderBookings();
+      }).catch(err=>alert("Error saving booking: "+err));
+    }
 
-/* ====================
-   Export CSV
-   ==================== */
-document.getElementById("exportCSVBtn").addEventListener("click", () => {
-  if (!isAdmin) return alert("Only admin can export.");
-  const rows = [["id","machine","name","room","date","time","reference","status"]];
-  bookings.forEach(b => rows.push([b.id,b.machine,b.name,b.room,b.date,b.time,b.reference,b.status]));
-  const csv = rows.map(r => r.map(cell => `"${String(cell).replace(/"/g,'""')}"`).join(",")).join("\n");
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a"); a.href = url; a.download = 'bookings.csv'; a.click();
-  URL.revokeObjectURL(url);
-});
+    // ===================== RENDER BOOKINGS =====================
+    function renderBookings(){
+      const machine=document.getElementById("viewMachine").value;
+      const weekNum=parseInt(document.getElementById("weekSelector").value);
+      db.ref('bookings').once('value', snapshot=>{
+        bookings=snapshot.val()?Object.values(snapshot.val()):[];
 
-/* ====================
-   Init
-   ==================== */
-document.getElementById("machine").addEventListener("change", updateTimeSlots);
-document.getElementById("date").addEventListener("change", updateTimeSlots);
-document.getElementById("viewMachine").addEventListener("change", renderBookings);
+        const startDate=new Date(); startDate.setDate(startDate.getDate()+7*(weekNum-1));
+        const weekDates=[]; for(let i=0;i<7;i++){ const d=new Date(startDate); d.setDate(startDate.getDate()+i); weekDates.push(d); }
+        const scheduleDiv=document.getElementById("weeklySchedule"); scheduleDiv.innerHTML="";
+        document.getElementById("weekDisplay").textContent="Week "+weekNum+" ("+weekDates[0].toLocaleDateString()+" - "+weekDates[6].toLocaleDateString()+")";
 
-(async function init() {
-  populateWeekDropdown();
-  await loadBookingsFromSheet();
-  renderBookings();
-})();
-</script>
+        weekDates.forEach(d=>{
+          const dateStr=d.toISOString().split("T")[0];
+          const weekday=weekdayNameFromDate(dateStr);
+          const dayBookings=bookings.filter(b=>b.machine===machine&&b.date===dateStr);
+
+          const dayDiv=document.createElement("div");
+          const todayBadge=(new Date().toDateString()===d.toDateString())?'<span class="today-badge">Today</span>':'';
+          dayDiv.innerHTML='<strong>'+weekday+' ('+dateStr+') </strong>'+todayBadge;
+
+          const ul=document.createElement("ul");
+          schedules[machine][weekday].forEach(slot=>{
+            const b=dayBookings.find(bk=>bk.time===slot);
+            const li=document.createElement("li");
+            if(b){
+              li.innerHTML=`${slot} - <span class="status-${b.status.toLowerCase()}">${b.status}</span> ${isAdmin?('<button class="cancel-button" onclick="cancelBooking('+b.id+')">Cancel</button>'):""}`;
+            }else{
+              li.textContent=slot;
+            }
+            ul.appendChild(li);
+          });
+          dayDiv.appendChild(ul);
+          scheduleDiv.appendChild(dayDiv);
+        });
+      });
+    }
+
+    // ===================== ADMIN =====================
+    function loginAsAdmin(){ document.getElementById("adminDialog").showModal(); }
+    document.getElementById("adminForm").addEventListener("submit", e=>{
+      e.preventDefault();
+      const pass=document.getElementById("adminPassword").value;
+      if(pass==="admin123"){ isAdmin=true; document.getElementById("adminDialog").close(); document.getElementById("adminLogoutBtn").style.display="inline-block"; document.getElementById("exportCSVBtn").style.display="inline-block"; document.getElementById("resetBookingsBtn").style.display="inline-block"; renderBookings(); } else { document.getElementById("adminError").textContent="Wrong password"; }
+    });
+    function logoutAdmin(){ isAdmin=false; document.getElementById("adminLogoutBtn").style.display="none"; document.getElementById("exportCSVBtn").style.display="none"; document.getElementById("resetBookingsBtn").style.display="none"; renderBookings(); }
+    function cancelBooking(id){ if(confirm("Cancel this booking?")) db.ref('bookings/'+id).remove().then(()=>renderBookings()); }
+    function resetAllBookings(){ if(confirm("Reset all bookings?")) db.ref('bookings').remove().then(()=>renderBookings()); }
+
+    // ===================== WEEK SELECTOR =====================
+    function initWeekSelector(){
+      const sel=document.getElementById("weekSelector");
+      for(let i=1;i<=24;i++){ const o=document.createElement("option"); o.value=i; o.textContent=i; sel.appendChild(o); }
+      sel.value=1;
+    }
+
+    window.onload=function(){ initWeekSelector(); renderBookings(); };
+  </script>
 </body>
 </html>
