@@ -24,8 +24,8 @@
     .small { font-size: 13px; color: #555; margin-bottom: 8px; }
     ul { padding-left: 18px; margin-top: 6px; }
     label { display:block; font-size:14px; margin-bottom:4px; }
-    .controls { display:flex; gap:10px; align-items:center; margin-bottom:12px; }
-    .controls select, .controls input { flex:1; }
+    .controls { display:flex; gap:10px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
+    .controls select, .controls input { flex:1; min-width: 180px; }
     table { width:100%; border-collapse: collapse; }
     th, td { text-align:left; padding:6px 8px; border-bottom: 1px solid #eee; }
     .legend { margin:10px 0; font-size:14px; }
@@ -34,20 +34,20 @@
     .badge.paid { background: #cfe2ff; color:#084298; }
     .badge.completed { background: #d1e7dd; color:#0f5132; }
     .top-row { display:flex; gap:16px; align-items:center; margin-bottom:12px; }
-    @media (max-width:900px) { .top-row { flex-direction: column; } .controls { flex-direction: column; } }
+    @media (max-width:900px) { .top-row { flex-direction: column; } .controls { flex-direction: column; align-items: stretch; } }
 
     /* ---------------------------
        Spacing: Name + Room side-by-side
        --------------------------- */
     .form-row {
       display: flex;
-      gap: 18px;         /* horizontal space between the two fields */
+      gap: 18px;
       margin-top: 6px;
       align-items: flex-start;
     }
     .form-row .field {
-      flex: 1;           /* make both fields equal width */
-      min-width: 0;      /* allow proper shrinking */
+      flex: 1;
+      min-width: 0;
       display: flex;
       flex-direction: column;
     }
@@ -63,7 +63,7 @@
     .admin-only { display: none; }
     body.admin .admin-only { display: block; }
 
-    /* ===== compact edit UI ===== */
+    /* ===== compact edit UI for status ===== */
     .small-actions { display:inline-flex; gap:6px; align-items:center; }
     .edit-btn { padding:4px 8px; font-size:12px; border-radius:6px; cursor:pointer; background:#0d6efd; color:white; border:none; }
     .status-dropdown-compact { display:none; font-size:13px; padding:3px 6px; border-radius:6px; }
@@ -72,7 +72,6 @@
     .booking-li .meta { color:#333; font-size:14px; }
     .booking-li .meta .ref { color:#666; font-size:13px; margin-left:6px; }
     .booking-li button.cancel-button { margin-left:8px; }
-    /* ensure the inline select doesn't push whole layout too wide on small screens */
     @media (max-width:600px) {
       .booking-li { flex-direction: column; align-items:flex-start; }
       .small-actions { margin-top:6px; }
@@ -168,7 +167,10 @@
 
     <button id="adminLoginBtn" onclick="loginAsAdmin()">🔐 Admin</button>
     <button id="adminLogoutBtn" onclick="logoutAdmin()" style="display:none;">🚪 Logout</button>
+
     <button id="exportCSVBtn" style="display:none; background:#007bff">Export CSV</button>
+    <!-- NEW: Send to Google Sheet (admin only; shown after login) -->
+    <button id="sendToSheetBtn" style="display:none; background:#34a853">Send to Google Sheet</button>
   </div>
 
   <div id="weekDisplay" class="admin-only"></div>
@@ -197,7 +199,7 @@
 
 <script>
 /* ====================
-   SCHEDULES
+   SCHEDULES (edit as needed)
    ==================== */
 const schedules = {
   "Brothers Washer": {
@@ -489,14 +491,13 @@ function renderBookings() {
         statusSpan.className = `status-text status-${statusClass}`;
         statusSpan.textContent = b.status;
         
-        // Container for small actions (status text + edit button + hidden select)
+        // actions container
         const actions = document.createElement("div");
         actions.className = "small-actions";
-
         actions.appendChild(statusSpan);
 
         if (isAdmin) {
-          // Edit button (small)
+          // Edit button
           const editBtn = document.createElement("button");
           editBtn.className = "edit-btn";
           editBtn.type = "button";
@@ -508,39 +509,32 @@ function renderBookings() {
           select.className = "status-dropdown-compact";
           ["Processing","Paid","Completed"].forEach(s => {
             const opt = document.createElement("option");
-            opt.value = s;
-            opt.text = s;
+            opt.value = s; opt.text = s;
             if (b.status === s) opt.selected = true;
             select.appendChild(opt);
           });
           actions.appendChild(select);
 
-          // Cancel button to cancel booking (same as before)
+          // Cancel booking
           const cancelBtn = document.createElement("button");
           cancelBtn.className = "cancel-button";
           cancelBtn.type = "button";
           cancelBtn.textContent = "Cancel";
           cancelBtn.onclick = () => cancelBookingById(b.id);
-          // We'll append cancel after actions (so it's separate)
-          // Wire up edit behavior:
+
+          // Wire Edit behavior
           editBtn.onclick = () => {
             editBtn.style.display = "none";
             select.style.display = "inline-block";
             select.focus();
           };
 
-          // change status when user chooses
           select.onchange = () => {
             updateStatusById(b.id, select.value);
-            // update UI immediately (renderBookings will reset states)
-            // hide select and show edit again
             select.style.display = "none";
             editBtn.style.display = "inline-block";
           };
-
-          // if user clicks away, hide select and show edit
           select.onblur = () => {
-            // small timeout so onchange can fire first if user selected
             setTimeout(()=> {
               select.style.display = "none";
               editBtn.style.display = "inline-block";
@@ -550,7 +544,6 @@ function renderBookings() {
           li.appendChild(actions);
           li.appendChild(cancelBtn);
         } else {
-          // if not admin, just show status text inline
           li.appendChild(actions);
         }
 
@@ -581,6 +574,9 @@ function updateStatusById(id, status) {
   renderBookings();
 }
 
+/* ====================
+   Admin login/logout (show/hide admin-only UI)
+   ==================== */
 function loginAsAdmin() {
   const dialog = document.getElementById("adminDialog");
   const form = document.getElementById("adminForm");
@@ -593,13 +589,13 @@ function loginAsAdmin() {
     e.preventDefault();
     if (input.value === "admin123") {
       isAdmin = true;
-      document.body.classList.add("admin"); // <-- SHOW admin-only UI
+      document.body.classList.add("admin");
       dialog.close();
       document.getElementById("resetBookingsBtn").style.display = "inline-block";
       document.getElementById("adminLoginBtn").style.display = "none";
       document.getElementById("adminLogoutBtn").style.display = "inline-block";
       document.getElementById("exportCSVBtn").style.display = "inline-block";
-      // sync viewMachine with machine select default
+      document.getElementById("sendToSheetBtn").style.display = "inline-block"; // NEW: show send-to-sheet
       document.getElementById("viewMachine").value = document.getElementById("machine").value;
       renderBookings();
     } else {
@@ -610,11 +606,12 @@ function loginAsAdmin() {
 
 function logoutAdmin() {
   isAdmin = false;
-  document.body.classList.remove("admin"); // <-- HIDE admin-only UI
+  document.body.classList.remove("admin");
   document.getElementById("resetBookingsBtn").style.display = "none";
   document.getElementById("adminLoginBtn").style.display = "inline-block";
   document.getElementById("adminLogoutBtn").style.display = "none";
   document.getElementById("exportCSVBtn").style.display = "none";
+  document.getElementById("sendToSheetBtn").style.display = "none"; // NEW: hide send-to-sheet
   renderBookings();
 }
 
@@ -639,6 +636,51 @@ document.getElementById("exportCSVBtn").addEventListener("click", () => {
   a.href = url; a.download = 'bookings.csv'; a.click();
   URL.revokeObjectURL(url);
 });
+
+/* ====================
+   Send ALL bookings to Google Sheet (admin)
+   ==================== */
+
+// Your deployed Apps Script Web App URL:
+const SHEET_WEBAPP_URL = "https://script.google.com/macros/s/AKfycby9vq8eT25_DAN9NgNT6fTMJhewfrdzaYZChQbpXquhLd1b98iN1MhOOFYjgVlR1Pc/exec";
+
+async function sendAllBookingsToGoogleSheet() {
+  if (!isAdmin) return alert("Only admin can send data.");
+
+  const btn = document.getElementById("sendToSheetBtn");
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Sending…";
+
+  try {
+    // To avoid CORS preflight, use text/plain; Apps Script will still parse JSON OK.
+    const payload = { rows: bookings || [] };
+
+    const res = await fetch(SHEET_WEBAPP_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(payload)
+    });
+
+    // Try to parse response (may succeed depending on CORS)
+    let msg = `Sent ${payload.rows.length} row(s) to Google Sheet.`;
+    try {
+      const data = await res.json();
+      if (data && data.ok && typeof data.inserted === "number") {
+        msg = `Sent ${data.inserted} row(s) to Google Sheet.`;
+      }
+    } catch(_) { /* ignore if opaque */ }
+
+    alert(msg);
+  } catch (err) {
+    console.error(err);
+    alert("Failed to send to Google Sheet. Please check the Web App deployment & console.");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
+document.getElementById("sendToSheetBtn").addEventListener("click", sendAllBookingsToGoogleSheet);
 
 /* ====================
    Utilities & Init
